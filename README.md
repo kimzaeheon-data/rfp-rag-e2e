@@ -1,4 +1,3 @@
----
 # 2026-Agentic-RAG-Project: RFP 문서 요약 & 질문/답변 챗봇
 
 AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타트업 **'입찰메이트(RFPilot)'** 의 사내 RAG 시스템입니다. 공공조달 RFP 문서(HWP 96 / PDF 4, 총 100건)에 대해 컨설턴트가 자연어로 질의하면, 검색·생성·의무항목 추출을 결합해 답변과 준수 체크리스트를 제공합니다.
@@ -257,7 +256,6 @@ python eval_retrieval.py --golden golden_dataset_v4.json --rewrite --meta
 # 추후 작성 예정
 
 ```
----
 
 ---
 
@@ -331,6 +329,7 @@ NDA 데이터는 리포에 포함되지 않습니다(.gitignore). 드라이브(D
 | 검색 | 임베딩 모델 교체(OpenAI text-embedding-3-small → bge-m3) 시 기존 FAISS 인덱스로 검색하면 깨짐 |인덱스는 임베딩 모델(차원·벡터 공간)에 종속적이라 다른 모델의 벡터와 혼용 불가 | build_index_hf.py로 별도 인덱스(data/faiss_index_bge) 새로 빌드, 기존 인덱스와 분리 관리 |
 | 생성 | | | |
 
+---
 
 ## 데이터 처리 정책
 
