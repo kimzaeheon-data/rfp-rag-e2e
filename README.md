@@ -21,7 +21,11 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
 | 라우트 C (의무항목 추출) | Item Coverage (V5, 8문서 전수) | 0.886 |
 | 라우트 C | Item Precision | 0.286 |
 | 라우트 C | Review Burden | 9.7% |
-| 검색 (RAG) | RAGAS 등 | 담당자 작성 예정 |
+| 검색 (RAG) | Hit Rate @5 | 0.940 |
+| 검색 (RAG) | MRR | 0.940 |
+| 검색 (RAG) | Context Recall | 0.940 |
+| 검색 (RAG) | Context Precision | 0.848 |
+| 검색 (RAG) | 평균 응답 시간 | 207.7ms |
 | 생성 | 응답 품질 | 담당자 작성 예정 |
 
 라우트 C는 문서 단위 전수 채점(filter=none) 기준이며, 문서별 Coverage는 0.831~0.922로 안정적입니다.
@@ -214,7 +218,29 @@ python evaluation/test_compliance_extractor.py           # 추출기 통합
 ### 검색 단독 실행
 
 ```bash
-# 추후 작성 예정
+# 디렉토리 이동
+cd backend/retrieval
+
+# 1) 청크 로드 확인 (data/processed/chunks_v1_enriched.json → LangChain Document)
+python loader.py
+
+# 2) bge-m3 임베딩 모델 로드 확인
+python embedder_hf.py
+
+# 3) bge-m3 FAISS 인덱스 빌드 (최초 1회 또는 청크 변경 시 → data/faiss_index_bge 생성)
+python build_index_hf.py
+
+# 4) FAISS_INDEX_PATH를 bge 인덱스로 지정 (최종 채택 구성)
+export FAISS_INDEX_PATH=data/faiss_index_bge
+
+# 5) retriever 단독 테스트 (메타필터 3단계 매칭 + MMR 검색)
+python retriever.py
+
+# 6) 전체 검색 파이프라인 실행 (rewrite → parse → retrieve → grade, LangGraph)
+python rag_subgraph.py
+
+# 7) (선택) 골든셋 기준 검색 성능 평가 — 최종 채택 구성(rewrite + meta filtering)
+python eval_retrieval.py --golden golden_dataset_v4.json --rewrite --meta
 
 ```
 
@@ -250,7 +276,7 @@ NDA 데이터는 리포에 포함되지 않습니다(.gitignore). 드라이브(D
 | 골든셋 | `data/processed/` | 라벨 (v5_gold_labels.json 등) |
 | 추출캐시 | `data/eval_cache/extractions/` | 문서별 추출 결과 |
 | 평가결과 | `evaluation/reports/` | 채점 스냅샷 |
-| faiss_index | `data/faiss_index/` | 검색 인덱스 (검색팀) |
+| faiss_index | `data/faiss_index_bge/` | 검색 인덱스 (검색팀) |
 
 가공 산출물(파싱본/마스킹본/청크/골든셋)은 드라이브에 있으므로, 처음부터 재생성하지 않고 받아서 배치하면 바로 다음 단계를 실행할 수 있습니다.
 
@@ -287,14 +313,24 @@ NDA 데이터는 리포에 포함되지 않습니다(.gitignore). 드라이브(D
 
 ## 트러블슈팅
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| 한글 파일이 깨진 채 저장됨 | PowerShell Get-Content/Set-Content가 CP949로 처리 | Python io.open(encoding="utf-8")로 읽고 쓰기 |
-| 콘솔에서 한글·기호가 깨져 보임 | 콘솔 출력 인코딩이 CP949 | PYTHONIOENCODING=utf-8 설정 후 실행 |
-| build_chunks 실행 시 입력 파일 없음 | 마스킹본이 data/processed/에 없음 | 드라이브에서 masked_documents_v3.json 수령 후 배치 |
-| scan_3stage/build_manifest/골든셋 빌드 에러 | enriched 청크가 data/processed/에 없음 | 드라이브에서 enriched 청크 수령 후 배치 (청킹 이후 단계) |
-| run_v5_scoring.py 실행 시 파일 없음 에러 | gold(v5_gold_questions.json)가 없음 | make_v5_loader.py로 생성하거나 드라이브 수령 |
-| 채점이 예상보다 느리고 비용이 큼 | 캐시 미스로 matcher 신규 호출 | 캐시 배치 확인. 캐시 히트 시 재호출 0 |
+| 담당 | 증상 | 원인 | 해결 |
+|------|------|------|------|
+| 데이터 | 한글 파일이 깨진 채 저장됨 | PowerShell Get-Content/Set-Content가 CP949로 처리 | Python io.open(encoding="utf-8")로 읽고 쓰기 |
+| 데이터 | 콘솔에서 한글·기호가 깨져 보임 | 콘솔 출력 인코딩이 CP949 | PYTHONIOENCODING=utf-8 설정 후 실행 |
+| 데이터| build_chunks 실행 시 입력 파일 없음 | 마스킹본이 data/processed/에 없음 | 드라이브에서 masked_documents_v3.json 수령 후 배치 |
+| 데이터| scan_3stage/build_manifest/골든셋 빌드 에러 | enriched 청크가 data/processed/에 없음 | 드라이브에서 enriched 청크 수령 후 배치 (청킹 이후 단계) |
+| 데이터| run_v5_scoring.py 실행 시 파일 없음 에러 | gold(v5_gold_questions.json)가 없음 | make_v5_loader.py로 생성하거나 드라이브 수령 |
+| 데이터| 채점이 예상보다 느리고 비용이 큼 | 캐시 미스로 matcher 신규 호출 | 캐시 배치 확인. 캐시 히트 시 재호출 0 |
+| 검색 | followup 질문("그럼 이 사업은...") 검색 완전 실패 (HR@5 0.0~0.2) | history 없이 지시어 그대로 벡터 검색에 투입 → retriever가 지시어를 해소 못함 | query_rewriter.py로 질문을 독립 문장으로 재작성 후 검색 (HR@5 1.000으로 개선) |
+| 검색 | single_doc 질문의 15%가 정답 청크 5위 밖으로 밀림 | 사업명·기관명 표기 변형(줄임말 등)을 벡터 유사도만으로 처리 못함 | agency 메타 필터 3단계 매칭(exact→별칭사전→rapidfuzz) 적용, _resolve_agency |
+| 검색 | agency + project_name 동시 필터링 시 오히려 성능 하락 | project_name은 fallback 없는 단순 substring 매칭이라, 파서가 사업명을 잘못 추출하면 AND 조건으로 정답 청크까지 걸러짐 | project_name 필터 빼고 agency만 필터링(agency-only)으로 최종 채택 |
+| 검색 | agency 필터 매칭 실패/0건 시 검색 결과 자체가 0개로 실패 | 기관명 매핑 안 되면 그대로 빈 결과 반환 | re_retrieve_fn으로 agency 필터 자동 스킵 후 재검색(fallback) 추가 |
+| 검색 | Reranking(ms-marco, bge-reranker-large) 적용 시 오히려 MRR 하락 | ms-marco는 영어 데이터셋 학습 모델이라 한국어 공공조달 도메인 판별력 없음 / bge-reranker-large도 범용이라 FAISS 임베딩 순위를 오히려 역전시킴 | reranking 최종 미채택. 한국어 특화 cross-encoder 재검토는 향후 과제로 남김 |
+| 검색 | rerank_top_n=20에서는 21위 밖 정답 문서를 rerank가 아예 못 봄, top_n=100으로 늘리면 레이턴시 10배(4.8s→44.8s) 증가 + 성능도 저하 | rerank 후보 범위와 레이턴시가 트레이드오프 관계 | 범위 확대·축소 둘 다 실패 → reranking 자체를 파이프라인에서 제외 |
+| 검색 | Multi-query RRF 적용 후 multi_doc Context Precision 대폭 하락(0.688→0.560) | MMR 결과에 score 메타데이터가 없어 RRF 정렬이 사실상 무의미 / 중복 제거 시 후보가 오히려 줄어듦 / 무관 문서가 복수 쿼리에서 중복 노출돼 상위권 진입 | multi-query 최종 드롭. RRF 대신 메타데이터 직접 쿼리 방식 검토를 향후 과제로 남김 |
+| 검색 | 임베딩 모델 교체(OpenAI text-embedding-3-small → bge-m3) 시 기존 FAISS 인덱스로 검색하면 깨짐 |인덱스는 임베딩 모델(차원·벡터 공간)에 종속적이라 다른 모델의 벡터와 혼용 불가 | build_index_hf.py로 별도 인덱스(data/faiss_index_bge) 새로 빌드, 기존 인덱스와 분리 관리 |
+| 생성 | | | |
+
 
 ## 데이터 처리 정책
 
