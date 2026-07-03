@@ -168,8 +168,9 @@ pip install -e .
 # 1) 원본 재파싱 (HWP/PDF 100건 → canonical 본문)
 python data_processing/build_parsed_v2.py
 
-# 2) 마스킹본 수령 (드라이브 → data/processed/masked_documents_v3.json)
-#    마스킹 적용 산출물은 드라이브에서 수령 (적용 스크립트는 리포 미포함)
+# 2) PII 마스킹 적용 (parsed → masked_documents_v3.json)
+#    v3 정책: 유선·대표번호 공개 / 개인 휴대폰·이메일·주민·사업자·법인 마스킹
+PYTHONIOENCODING=utf-8 python data_processing/remask_v3.py
 
 # 3) 청킹 (표 추출 v2 + tiktoken 기반, 입력=마스킹본)
 python data_processing/build_chunks.py
@@ -177,8 +178,9 @@ python data_processing/build_chunks.py
 # 4) 청크 품질 게이트 (중복/과세분화/PUA/토큰)
 python evaluation/check_chunks.py
 
-# 5) enriched 청크 수령 (드라이브 → data/processed/chunks_v1_0622_enriched.json)
-#    청크 + doc_metadata 조인 산출물. 이후 단계(마스킹 검증/골든셋)의 입력
+# 5) enriched 청크 생성 (청크 + doc_metadata → chunks_v1_0622_enriched.json)
+#    이후 단계(마스킹 검증/매니페스트/골든셋)의 입력
+python data_processing/enrich_chunks.py
 
 # 6) PII 마스킹 검증 (3단계 누출 검사, PASS/FAIL 판정) — enriched 청크 필요
 python evaluation/scan_3stage.py
@@ -243,7 +245,8 @@ NDA 데이터는 리포에 포함되지 않습니다(.gitignore). 드라이브(D
 | 파싱본문 | `data/processed/` | canonical 본문 (parsed_documents_v2.json) |
 | 마스킹본 | `data/processed/` | PII 마스킹 적용본 (masked_documents_v3.json) |
 | 청크 | `data/processed/` | 청크 JSON (chunks_v1_0622_PASS.json) |
-| enriched 청크 | `data/processed/` | 청크 + doc_metadata 조인 (chunks_v1_0622_enriched.json, 마스킹 검증·골든셋 입력) |
+| doc_metadata | `data/processed/` | 문서 메타데이터 (enrich_chunks 입력) |
+| enriched 청크 | `data/processed/` | 청크 + doc_metadata 조인 (chunks_v1_0622_enriched.json, 마스킹 검증·골든셋 입력) |(chunks_v1_0622_enriched.json, 마스킹 검증·골든셋 입력) |
 | 골든셋 | `data/processed/` | 라벨 (v5_gold_labels.json 등) |
 | 추출캐시 | `data/eval_cache/extractions/` | 문서별 추출 결과 |
 | 평가결과 | `evaluation/reports/` | 채점 스냅샷 |
