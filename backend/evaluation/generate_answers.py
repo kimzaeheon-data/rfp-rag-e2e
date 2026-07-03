@@ -136,6 +136,8 @@ def main():
                         help="Ollama 모델명(트랙②, 예: qwen3:8b). 지정 시 config.ollama_model 덮어씀.")
     parser.add_argument("--golden", type=str, default=None,
                         help="골든셋 파일 경로(선택). 지정 시 config 경로 대신 사용(표본셋 주입용).")
+    parser.add_argument("--tag", type=str, default=None,
+                        help="파일명 끝에 붙일 실험 구분 태그(예: final63). 기존 실험과 안 겹치게.")
     args = parser.parse_args()
 
     config = load_config()
@@ -169,6 +171,9 @@ def main():
         strategy = config.get("re_retrieve_strategy")
         if strategy:
             tag = f"{tag}_{strategy}"
+    # 실험 구분 태그(선택): 같은 조건 재실행이 기존 파일을 덮지 않도록 파일명 끝에 붙인다.
+    if args.tag:
+        tag = f"{tag}_{args.tag}"
     samples_path = RESULTS_DIR / f"samples_{tag}.json"
 
     # 생성 메타도 함께 저장(보고서 기록·토큰 추적용)

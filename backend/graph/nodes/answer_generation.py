@@ -15,9 +15,15 @@ from backend.generation.generator import generate_answer  # 기존 생성 함수
 _ROUTE_C_OK = {"complete_verified", "complete_with_review", "partial"}
 
 
+# 답변에 렌더할 최대 항목 수(가독성). None으로 두면 전량 렌더.
+_CHECKLIST_RENDER_LIMIT = 30
+
+
 def render_checklist(items: list[dict]) -> str:
     """
     체크리스트 항목 리스트를 평문 답변으로 렌더한다(MVP: 단순 번호 나열).
+    항목이 많으면(대형 문서는 수백~천 건) _CHECKLIST_RENDER_LIMIT까지만 표시하고
+    총 건수를 안내한다.
 
     Args:
         items: [{text, category, evidence, flags}, ...]
@@ -26,17 +32,22 @@ def render_checklist(items: list[dict]) -> str:
     """
     if not items:
         return "해당 문서에서 추출된 체크리스트 항목이 없습니다."
+    total = len(items)
+    shown = items if _CHECKLIST_RENDER_LIMIT is None else items[:_CHECKLIST_RENDER_LIMIT]
     lines = ["다음은 해당 문서에서 추출한 준수 체크리스트입니다.\n"]
-    for i, it in enumerate(items, 1):
+    for i, it in enumerate(shown, 1):
         cat = it.get("category", "")
         text = it.get("text", "")
         lines.append(f"{i}. [{cat}] {text}")
+    if len(shown) < total:
+        lines.append(f"\n… 총 {total}건 중 {len(shown)}건 표시.")
     return "\n".join(lines)
 
 
 def _status_message(status: str) -> str:
     """라우트 비정상 상태를 사용자 안내 문구로 변환."""
     return {
+        "awaiting_doc_selection": "체크리스트를 만들 공고를 아래에서 선택해 주세요.",
         "no_doc_selected": "체크리스트를 만들 문서를 먼저 선택해 주세요.",
         "doc_not_found": "선택하신 문서를 찾을 수 없습니다.",
         "failed": "체크리스트 추출에 실패했습니다. 잠시 후 다시 시도해 주세요.",

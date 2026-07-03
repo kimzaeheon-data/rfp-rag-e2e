@@ -250,6 +250,8 @@ def main():
     parser = argparse.ArgumentParser(description="채점 전용 (생성과 분리)")
     parser.add_argument("--samples", type=str, required=True,
                         help="채점할 samples JSON (generate_answers 산출물). 파일명 또는 경로.")
+    parser.add_argument("--tag", type=str, default=None,
+                        help="파일명 끝에 붙일 실험 구분 태그(예: final63). 기존 실험과 안 겹치게.")
     parser.add_argument("--judge-refusal", action="store_true",
                         help="거부(refusal) 답변을 LLM Judge로 채점한다. 없으면 거부는 집계만 하고 건너뛴다.")
     parser.add_argument("--refusal-only", action="store_true",
@@ -337,7 +339,8 @@ def main():
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     # 파일명에 모델 태그를 붙여 모델별로 분리 저장(gpt면 metrics_system_v3_gpt-5-mini.json 등)
-    metrics_path = RESULTS_DIR / f"metrics_{prompt_version}_{model_tag}{strategy_tag}.json"
+    tag_suffix = f"_{args.tag}" if args.tag else ""   # 실험 구분 태그(선택)
+    metrics_path = RESULTS_DIR / f"metrics_{prompt_version}_{model_tag}{strategy_tag}{tag_suffix}.json"
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 

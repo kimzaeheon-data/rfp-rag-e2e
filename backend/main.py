@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 # BaseModel: 요청 데이터 형식 정의할 때 사용
 from pydantic import BaseModel
+from typing import Optional
 
 import time
 
@@ -29,12 +30,17 @@ class ChatRequest(BaseModel):
     query: str
     history: list[dict] = []
     max_history: int = 10   # 프론트 슬라이더 값 (없으면 기본 10)
+    selected_doc_id: Optional[str] = None   # 라우트 C 2단계: UI에서 고른 문서 ID
+    retriever_type: Optional[str] = None    # 검색 방식 토글(naive_rag / agentic_rag). 없으면 config.yaml
 
 # /chat 엔드포인트 (POST 방식)
 # 프론트에서 query/history/max_history를 받아 get_ai_response 호출 후 dict를 JSON으로 응답
 @app.post("/chat")
 def chat(req: ChatRequest):
-    result = get_ai_response(query=req.query, history=req.history, max_history=req.max_history)
+    result = get_ai_response(
+        query=req.query, history=req.history, max_history=req.max_history,
+        selected_doc_id=req.selected_doc_id, retriever_type=req.retriever_type,
+    )
     return result
 
 

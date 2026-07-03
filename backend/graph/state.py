@@ -27,6 +27,7 @@ class GraphState(TypedDict, total=False):
     # --- route_a / route_c 산출 ---
     docs: list[Document]                # 라우트 A: 검색된 Document 통째로 보관(결정2)
     checklist_items: list[dict]         # 라우트 C: 추출된 체크리스트 항목
+    candidate_docs: list[dict]          # 라우트 C 2단계: 문서 미선택 시 후보 문서 리스트(UI 선택용)
     route_status: str                   # 라우트 실행 상태(ok / doc_not_found / failed 등)
 
     # --- answer_generation_node 산출 ---

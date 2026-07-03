@@ -11,6 +11,12 @@ def trim_history(history: list[dict], max_history: int = 10) -> list[dict]:
     if not history:
         return []
 
+    # 0 이하: 이력을 전혀 참고하지 않음(매 질문 독립).
+    # (주의: max_history*2=0이면 history[-0:]가 전체를 반환하는 파이썬 슬라이싱 특성 때문에
+    #        별도로 빈 리스트를 반환해야 '이력 없음'이 된다.)
+    if max_history <= 0:
+        return []
+
     # 1턴 = user/assistant 2개 메시지 → 최근 max_history턴 = 뒤에서 max_history*2개
     max_messages = max_history * 2
 

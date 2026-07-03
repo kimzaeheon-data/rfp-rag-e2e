@@ -117,7 +117,7 @@ def _get_graph_app():
 # use_ollama: True면 시나리오 A(Ollama), False면 B(gpt). 평가에서 모델 비교용
 def get_ai_response(query: str, history: list[dict] = None, config: dict = None,
                     max_history: int = None, use_ollama: bool = False,
-                    selected_doc_id: str = None) -> dict:
+                    selected_doc_id: str = None, retriever_type: str = None) -> dict:
     """
     외부 진입점(서비스·평가 공통). 내부 처리는 LangGraph 오케스트레이션으로 위임한다(옵션A).
     외부 시그니처와 반환 dict(answer/sources/retrieved_chunks/elapsed_sec/tokens_used)는
@@ -129,6 +129,10 @@ def get_ai_response(query: str, history: list[dict] = None, config: dict = None,
     start = time.time()
     history = history or []
     config = config or load_config()   # config 없으면 config.yaml에서 로드
+    # 요청에 retriever_type가 있으면 config.yaml 값보다 우선 적용(웹 토글 지배).
+    # 없으면(평가·직접호출 등) 기존 config 그대로 → 후방호환. 원본 mutate 방지 위해 얕은 복사.
+    if retriever_type:
+        config = {**config, "retriever_type": retriever_type}
 
     # 대화 이력 자르기 (우선순위: 인자 max_history > config 값 > 기본 10)
     if max_history is None:
@@ -155,11 +159,21 @@ def get_ai_response(query: str, history: list[dict] = None, config: dict = None,
             "file_name": d.metadata.get("file_name"),
             "section": d.metadata.get("section"),
             "score": d.metadata.get("score"),
+            # 문서 상세(참고 이미지) 표시용 메타 — enriched 청크 메타에서 그대로 노출
+            "project_name": d.metadata.get("project_name"),
+            "agency": d.metadata.get("agency"),
+            "budget_amount": d.metadata.get("budget_amount"),
+            "announcement_date": d.metadata.get("announcement_date"),
+            "bid_end": d.metadata.get("bid_end"),
+            "chunk_index": d.metadata.get("chunk_index"),
+            "content": d.page_content,   # 그 청크 본문(문서 클릭 시 표시)
         }
         for d in docs
     ]
+
     retrieved_chunks = [d.page_content for d in docs]
     elapsed_sec = round(time.time() - start, 2)
+    print(f"[pipeline] 응답 시간: {elapsed_sec}초")   # 백엔드 로그에 소요시간 표기
 
     return {
         "answer": answer,
@@ -169,7 +183,11 @@ def get_ai_response(query: str, history: list[dict] = None, config: dict = None,
         "tokens_used": tokens_used,
         # self_check 결과(디버깅·평가용). 기존 5키는 그대로라 후방호환.
         "check_flags": result.get("check_flags", []),
+        # 라우트 C 2단계: 후보 문서 리스트 + 라우트 실행 상태(프론트 UI 분기용)
+        "candidate_docs": result.get("candidate_docs", []),
+        "route_status": result.get("route_status", ""),
     }
+    
 
 
 # 직접 실행 시 전체 파이프라인 테스트
