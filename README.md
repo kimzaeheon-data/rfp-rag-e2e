@@ -8,6 +8,14 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
 
 ---
 
+## 데모 (웹 챗봇 화면)
+
+> _웹 챗봇 실제 동작 화면(스크린샷 또는 GIF)을 이 자리에 추가 예정._
+
+<!-- TODO(SD): 웹 챗봇 화면 스크린샷/움짤 삽입 -->
+
+---
+
 ## 프로젝트 개요 (수치)
 
 ### 데이터 규모
@@ -26,7 +34,8 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
 | 검색 (RAG) | Context Recall | 0.940 |
 | 검색 (RAG) | Context Precision | 0.848 |
 | 검색 (RAG) | 평균 응답 시간 | 207.7ms |
-| 생성 | 응답 품질 | 담당자 작성 예정 |
+| 생성 | Faithfulness (golden 63, 비거부 50건) | 0.905 |
+| 생성 | Answer Correctness | 0.608 |
 
 라우트 C는 문서 단위 전수 채점(filter=none) 기준이며, 문서별 Coverage는 0.831~0.922로 안정적입니다.
 
@@ -59,29 +68,29 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
 
 ## 프로젝트 파이프라인
 
-```
-              [사용자 질문]
-                   |
-      [Agentic 파이프라인 (바깥 껍데기)]
-                   |
-             Node: 질문 분석
-                   |
-        +---------------------+
-        |                     |
-        v                     v
-   Node: RAG 검색         Node: 라우트 C
-   *하이브리드 구조*       Compliance Validator 도구
-   "Naive RAG"           - 필수/반드시 키워드 검색(도구 특화)
-   + "Agentic RAG"       - LLM 체크리스트 생성
-        |                     |
-        +---------------------+
-                   |
-             Node: 답변 생성
-                   |
-               [최종 답변]
-```
+실제 LangGraph 노드 흐름입니다.
 
-> 위 다이어그램은 개념 흐름 기준입니다. 실제 LangGraph 노드 구조와의 상세 정합성은 각 노드 담당자 확인이 필요합니다(라우트 C 노드는 확인 완료).
+```
+[사용자 질문]
+   │  ▼
+질문 분석 (question_analysis)   대명사 해소·질문 재작성
+   │  ▼
+라우팅 (routing)   의도로 분기 (문서 선택 시 route_c 직행)
+   │
+   ├── route_a ── RFP 검색 (FAISS + bge-m3)
+   │      ├─ naive   : 재검색 없이 바로 생성
+   │      └─ agentic : grade → 부족 시 re_retrieve 재검색 루프
+   │
+   └── route_c ── 문서 선택 후 의무항목 추출
+          ├─ 후보 문서 반환 → 사용자 선택
+          └─ 선택 문서 체크리스트 생성 (캐시 우선)
+   │  ▼
+답변 생성 (answer_generation)   검색 근거로 답변 / 체크리스트 렌더
+   │  ▼
+검증 (self_check)   근거·거부 판정
+   │  ▼
+[최종 답변]
+```
 
 ---
 
@@ -232,16 +241,32 @@ python eval_retrieval.py --golden golden_dataset_v4.json --rewrite --meta
 ### 생성 단독 실행
 
 ```bash
-# 추후 작성 예정
+# 프로젝트 루트에서 실행 (backend는 python -m 으로 import)
+# 1) 그래프 단독 확인 (rewrite → routing → route_a 검색 → 답변, LangGraph)
+python -m backend.graph.build
 
+# 2) 파이프라인 단독 테스트 (get_ai_response)
+python -m backend.pipeline
+
+# 3) (선택) 생성 평가 — 골든셋 답변 생성 후 RAGAS 채점
+#    주의: OpenAI 호출로 비용 발생. 전체 실행 전 --limit로 소량 확인 권장.
+python -m backend.evaluation.generate_answers --limit 5
+python -m backend.evaluation.run_eval
 ```
 
 ### 챗봇 단독 실행
 
 ```bash
-# 추후 작성 예정
+# 백엔드 (FastAPI, http://localhost:8000) — 프로젝트 루트에서
+python -m backend.main
 
+# 프론트엔드 (React, http://localhost:3000) — 별도 터미널
+cd frontend
+npm install
+npm start
 ```
+
+> 프론트엔드는 `.env`의 `REACT_APP_API_URL`(기본 `http://localhost:8000`)로 백엔드에 연결합니다.
 
 ---
 
@@ -319,7 +344,9 @@ NDA 데이터는 리포에 포함되지 않습니다(.gitignore). 드라이브(D
 | 검색 | rerank_top_n=20에서는 21위 밖 정답 문서를 rerank가 아예 못 봄, top_n=100으로 늘리면 레이턴시 10배(4.8s→44.8s) 증가 + 성능도 저하 | rerank 후보 범위와 레이턴시가 트레이드오프 관계 | 범위 확대·축소 둘 다 실패 → reranking 자체를 파이프라인에서 제외 |
 | 검색 | Multi-query RRF 적용 후 multi_doc Context Precision 대폭 하락(0.688→0.560) | MMR 결과에 score 메타데이터가 없어 RRF 정렬이 사실상 무의미 / 중복 제거 시 후보가 오히려 줄어듦 / 무관 문서가 복수 쿼리에서 중복 노출돼 상위권 진입 | multi-query 최종 드롭. RRF 대신 메타데이터 직접 쿼리 방식 검토를 향후 과제로 남김 |
 | 검색 | 임베딩 모델 교체(OpenAI text-embedding-3-small → bge-m3) 시 기존 FAISS 인덱스로 검색하면 깨짐 |인덱스는 임베딩 모델(차원·벡터 공간)에 종속적이라 다른 모델의 벡터와 혼용 불가 | build_index_hf.py로 별도 인덱스(data/faiss_index_bge) 새로 빌드, 기존 인덱스와 분리 관리 |
-| 생성 | | | |
+| 생성 | 프론트에서 "서버 연결 실패" 표시 | 백엔드(:8000) 미기동 또는 API 주소 불일치 | `python -m backend.main` 기동 확인 + 프론트 `REACT_APP_API_URL` 점검 |
+| 생성 | `python backend/pipeline.py` 실행 시 `ModuleNotFoundError: backend` | 하위 폴더에서 실행 | 프로젝트 루트에서 `python -m backend.pipeline` 형식으로 실행 |
+| 생성 | 라우트 C 체크리스트가 문서당 수 분 소요 | 캐시 미스로 라이브 추출 | `data/eval_cache/extractions/`에 추출 캐시 배치(히트 시 즉시) |
 
 ---
 
