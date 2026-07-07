@@ -7,7 +7,11 @@ import { useChat } from "./useChat";
 // 답변 본문에 섞여 나오는 [출처: ...] 표기 제거(출처는 아래 참고 문서에서 별도 표시하므로 중복)
 function stripSourceTags(text) {
   if (!text) return text;
-  return text.replace(/\[출처:[^\]]*\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  return text
+    .replace(/\[출처:[^\]]*\]/g, "")   // 대괄호형 [출처: ...]
+    .replace(/^출처:.*$/gm, "")        // 대괄호 없는 출처: ... (줄 단위)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // 예산 숫자를 읽기 좋게(원 단위 콤마)
@@ -39,6 +43,173 @@ function groupByDoc(sources) {
   return Array.from(map.values());
 }
 
+// 답변이 참조한 공고(project_name) 기반 추천 질문 3개(고정 템플릿, LLM 미사용).
+// project_name이 없으면 지시어("이 사업")로 폴백한다.
+function buildSuggestions(projectName) {
+  const label = projectName || "이 사업";
+  return [
+    `${label} 입찰 마감일 언제야?`,
+    `${label} 예산 얼마야?`,
+    `${label} 요구사항 전부 뽑아줘`,
+  ];
+}
+
+// 라우트 C 체크리스트 화면 표출 상한(가독성). 파일 내보내기(CSV)는 전체를 담으므로 이 값과 무관.
+const CHECKLIST_RENDER_LIMIT = 30;
+
+// 검증 완료로 인정하는 evidence status. 이 외(unverified_evidence, out_of_scope_source 등)는 검토 필요.
+const VERIFIED_STATUSES = ["strict_verified", "relocated_verified", "cross_chunk_verified"];
+
+// 항목 단위 신뢰 판정: evidence가 하나라도 미검증이면 "검토 필요", 전부 검증되면 "원문 검증됨".
+// evidence가 없으면 근거 없음이므로 검토 필요로 본다.
+function itemVerified(it) {
+  const evs = it.evidence || [];
+  if (evs.length === 0) return false;
+  return evs.every((ev) => VERIFIED_STATUSES.includes(ev.status));
+}
+
+// 신뢰 배지 렌더(원문 검증됨 / 검토 필요). 도혁님 라우트 C 검증 스토리를 UI로 노출.
+function TrustBadge({ verified }) {
+  return verified ? (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+      <span className="material-symbols-outlined text-[13px]">verified</span>
+      원문 검증됨
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+      <span className="material-symbols-outlined text-[13px]">flag</span>
+      검토 필요
+    </span>
+  );
+}
+
+// 라우트 C 구조화 항목을 카드 리스트로 렌더한다. 카테고리 + 항목 텍스트 + 신뢰 배지.
+// (근거 펼침은 이후 단계에서 이 카드에 얹는다.)
+// 체크리스트 항목 카드 1개. 클릭하면 근거(evidence)의 원문 인용(quote)을 펼쳐 하이라이트한다.
+// (evidence가 없으면 펼칠 게 없으므로 클릭 비활성.)
+function ChecklistItem({ item, index }) {
+  const [open, setOpen] = useState(false);
+  const evidences = item.evidence || [];
+  const hasEvidence = evidences.length > 0;
+
+  return (
+    <div className="border border-outline-variant/40 rounded-xl bg-surface-container-low overflow-hidden">
+      {/* 카드 헤더(클릭 시 근거 펼침) */}
+      <button
+        onClick={() => hasEvidence && setOpen(!open)}
+        className={`w-full text-left px-4 py-3 flex items-start gap-2 ${hasEvidence ? "hover:bg-surface-container transition-colors cursor-pointer" : "cursor-default"}`}
+      >
+        <span className="text-[11px] font-bold text-on-surface-variant shrink-0 mt-0.5">{index + 1}.</span>
+        <div className="flex-1">
+          {/* 카테고리 칩 + 신뢰 배지(같은 줄) */}
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+            {item.category && (
+              <span className="inline-block text-[10px] font-bold text-primary bg-primary/10 rounded px-1.5 py-0.5">
+                {item.category}
+              </span>
+            )}
+            <TrustBadge verified={itemVerified(item)} />
+          </div>
+          <p className="text-[13px] text-on-surface leading-relaxed">{item.text}</p>
+        </div>
+        {/* 펼침 화살표(근거 있을 때만) */}
+        {hasEvidence && (
+          <span className="material-symbols-outlined text-[18px] text-on-surface-variant shrink-0 mt-0.5">
+            {open ? "expand_less" : "expand_more"}
+          </span>
+        )}
+      </button>
+
+      {/* 근거 펼침: evidence의 원문 인용(quote)을 하이라이트로 표시 */}
+      {open && hasEvidence && (
+        <div className="px-4 pb-3 pt-1 space-y-2 border-t border-outline-variant/30">
+          <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider pt-2">원문 근거</p>
+          {evidences.map((ev, ei) => {
+            const verified = VERIFIED_STATUSES.includes(ev.status);
+            return (
+              <div key={ei} className="text-[12px]">
+                {/* 인용 원문(하이라이트) — 검증됨은 초록, 검토필요는 주황 배경 */}
+                <span className={`inline ${verified ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900"} rounded px-1 py-0.5 leading-relaxed`}>
+                  “{ev.quote}”
+                </span>
+                {/* 근거 위치·상태 */}
+                <div className="text-[10px] text-on-surface-variant mt-1">
+                  {ev.chunk_id} · {verified ? "원문 검증됨" : "검토 필요"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// CSV 셀 이스케이프: 쉼표·따옴표·줄바꿈이 있으면 큰따옴표로 감싸고 내부 "는 ""로.
+// =,+,-,@로 시작하면 엑셀이 수식으로 오인(#NAME? 등)하므로 앞에 작은따옴표를 붙여 텍스트로 강제.
+function csvCell(v) {
+  let s = v == null ? "" : String(v);
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// 체크리스트 전체 항목을 CSV 문자열로 변환한다(항목 1개 = 1행, 실무용 6컬럼).
+// evidence가 여러 개면 근거 컬럼을 " | "로 합친다. 화면 표출(30건)과 무관하게 전체를 담는다.
+function itemsToCsv(items) {
+  const headers = ["번호", "카테고리", "항목", "검증상태", "근거원문", "근거위치"];
+  const rows = items.map((it, i) => {
+    const evs = it.evidence || [];
+    return [
+      i + 1,
+      it.category || "",
+      it.text || "",
+      itemVerified(it) ? "원문 검증됨" : "검토 필요",
+      evs.map((e) => e.quote).join(" | "),
+      evs.map((e) => e.chunk_id).join(" | "),
+    ].map(csvCell).join(",");
+  });
+  return [headers.join(","), ...rows].join("\n");
+}
+
+// CSV를 파일로 다운로드한다. 엑셀 한글 깨짐 방지를 위해 UTF-8 BOM을 앞에 붙인다.
+function downloadChecklistCsv(items) {
+  const csv = "\uFEFF" + itemsToCsv(items);   // \uFEFF = UTF-8 BOM
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "checklist.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderChecklist(items) {
+  const total = items.length;
+  const shown = items.slice(0, CHECKLIST_RENDER_LIMIT);
+  return (
+    <div>
+      {/* 헤더: 건수 안내 + CSV 내보내기(전체 항목) */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <p className="text-[13px] font-semibold text-on-surface">
+          추출한 준수 체크리스트 (총 {total}건{total > shown.length ? `, ${shown.length}건 표시` : ""})
+        </p>
+        <button
+          onClick={() => downloadChecklistCsv(items)}
+          className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors rounded-lg px-2.5 py-1.5 shrink-0"
+        >
+          <span className="material-symbols-outlined text-[15px]">download</span>
+          CSV 내보내기 (전체 {total}건)
+        </button>
+      </div>
+      <div className="space-y-2">
+        {shown.map((it, i) => (
+          <ChecklistItem key={i} item={it} index={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const {
     messages,
@@ -49,6 +220,7 @@ function App() {
     retrieverType, setRetrieverType,
     openSources, setOpenSources,
     sendMessage,
+    sendQuestion,
     selectDoc,
     startNewChat,
     loadSession,
@@ -262,7 +434,12 @@ function App() {
 
                     {/* 응답 카드 */}
                     <div className="bg-white border border-outline-variant/50 rounded-2xl p-6 shadow-soft relative">
-                      <p className="text-[15px] text-on-surface leading-loose whitespace-pre-wrap">{stripSourceTags(msg.content)}</p>
+                      {/* 라우트 C 체크리스트(구조화 항목)면 카드 렌더, 아니면 기존 텍스트 답변 */}
+                      {msg.checklistItems && msg.checklistItems.length > 0 ? (
+                        renderChecklist(msg.checklistItems)
+                      ) : (
+                        <p className="text-[15px] text-on-surface leading-loose whitespace-pre-wrap">{stripSourceTags(msg.content)}</p>
+                      )}
 
                       {/* 라우트 C 1단계: 후보 문서 선택 버튼. 클릭 시 해당 문서로 체크리스트 요청 */}
                       {msg.candidateDocs && msg.candidateDocs.length > 0 && (
@@ -344,6 +521,22 @@ function App() {
                         </div>
                       )}
                     </div>
+
+                    {/* 추천 질문: 출처가 있는 일반 답변(route_a)에만. 체크리스트 응답엔 미표시. */}
+                    {docs.length > 0 && !(msg.checklistItems && msg.checklistItems.length > 0) && (
+                      <div className="flex flex-wrap gap-2">
+                        {buildSuggestions(docs[0]?.project_name).map((q, qi) => (
+                          <button
+                            key={qi}
+                            onClick={() => sendQuestion(q)}
+                            disabled={loading}
+                            className="text-[12px] font-medium text-on-surface-variant bg-surface-container-low hover:bg-surface-container border border-outline-variant/40 rounded-full px-3 py-1.5 transition-colors disabled:opacity-40"
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

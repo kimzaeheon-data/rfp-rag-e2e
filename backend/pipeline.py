@@ -186,6 +186,9 @@ def get_ai_response(query: str, history: list[dict] = None, config: dict = None,
         # 라우트 C 2단계: 후보 문서 리스트 + 라우트 실행 상태(프론트 UI 분기용)
         "candidate_docs": result.get("candidate_docs", []),
         "route_status": result.get("route_status", ""),
+        # 라우트 C 체크리스트 구조화 데이터(항목별 카테고리·근거·검증상태). 프론트 카드 렌더·배지용.
+        # answer(텍스트)는 그대로 유지 → 후방호환. 전체 항목 전달(화면 표출 건수는 프론트가 제어).
+        "checklist_items": result.get("checklist_items", []),
     }
     
 

@@ -112,6 +112,7 @@ export function useChat() {
           sources: data.sources,
           chunks: data.retrieved_chunks,
           candidateDocs: data.candidate_docs,
+          checklistItems: data.checklist_items,   // 라우트 C 구조화 항목(카드 렌더·배지·CSV용)
         },
       ]);
     } catch (e) {
@@ -128,6 +129,12 @@ export function useChat() {
     const q = input;
     setInput("");
     submitToBackend({ role: "user", content: q }, q, null);
+  };
+
+  // 추천 질문 버튼 클릭 등 — 입력창을 거치지 않고 질문 문자열을 바로 전송(일반 질문 경로).
+  const sendQuestion = (text) => {
+    if (!text || !text.trim()) return;
+    submitToBackend({ role: "user", content: text }, text, null);
   };
 
   // 라우트 C 2단계 - 후보 문서 클릭 시 호출. 고른 문서로 체크리스트를 요청한다.
@@ -173,6 +180,7 @@ export function useChat() {
     retrieverType, setRetrieverType,
     openSources, setOpenSources,
     sendMessage,
+    sendQuestion,
     selectDoc,
     startNewChat,
     loadSession,

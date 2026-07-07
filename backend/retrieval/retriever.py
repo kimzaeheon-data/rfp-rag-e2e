@@ -26,7 +26,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from rapidfuzz import fuzz, process
 
-from embedder import get_cached_embeddings
+from embedder_hf import get_cached_embeddings
 from reranker import rerank
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
