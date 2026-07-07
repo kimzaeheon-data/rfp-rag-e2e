@@ -60,7 +60,7 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
 ## 팀 보고서
 
 > **보고서 제출 예정**
-<a href="https://github.com/Codeit-Part3-5Team/codeit-part3-5team-project">바로 가기</a>
+<a href="https://codeit-part3-5team.github.io/codeit-part3-5team-project/reports/RFP_프로젝트_완료_보고서_5팀.pdf">바로 가기</a>
 
 ---
 
