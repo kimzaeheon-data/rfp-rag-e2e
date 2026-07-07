@@ -49,7 +49,7 @@ data/raw/
 data/원본데이터/
 data/files/
 *.hwp
-*.pdf
+# *.pdf  # reports 폴더 -> PDF 파일 업로드 용도 주석 처리 (보고서 공유용) (2026.07.07 minjae)
 data_list.csv
 data_list*.xlsx
 # === 평가 산출물 (재생성 가능, 용량 관리) ===
