@@ -1,12 +1,12 @@
 # RFPilot · 공공조달 RFP 챗봇 개인 고도화
 
-코드잇 AI 엔지니어 10기 5팀에서 만든 공공조달 RFP 챗봇 **입찰메이트(RFPilot)**를 개인적으로 고도화한 저장소입니다. 팀 프로젝트를 마친 뒤 검색 평가 코드와 실제 챗봇의 요청 경로를 다시 따라가며, 검색 조건이 답변에 반영되는 방식과 전체 목록을 조회하는 방식을 개선했습니다.
+코드잇 AI 엔지니어 10기 5팀에서 만든 공공조달 RFP 챗봇 <strong>입찰메이트(RFPilot)</strong>를 개인적으로 고도화한 저장소입니다. 팀 프로젝트를 마친 뒤 검색 평가 코드와 실제 챗봇의 요청 경로를 다시 따라가며, 검색 조건이 답변에 반영되는 방식과 전체 목록을 조회하는 방식을 개선했습니다.
 
 ## 팀 프로젝트에서 만든 것
 
 팀은 공공조달 제안요청서 100건(HWP 96건, PDF 4건)을 대상으로 문서 조회·요약, 근거 인용, 준수 체크리스트 기능을 구현했습니다. 문서를 전처리해 BGE-M3와 FAISS로 검색하고, LangGraph가 질문 유형에 따라 조회와 체크리스트 경로를 선택합니다. FastAPI와 React로 챗봇을 연결했습니다.
 
-팀에서 저는 **검색 담당(Retrieval Engineer)**으로 임베딩 생성, 벡터 인덱스 구축, 검색 기법 개선과 평가를 맡았습니다. 팀원별 역할과 당시 성능 지표는 팀 저장소와 완료 보고서에 정리되어 있습니다. [원본 팀 저장소](https://github.com/Codeit-Part3-5Team/codeit-part3-5team-project) · [팀 프로젝트 완료 보고서](https://codeit-part3-5team.github.io/codeit-part3-5team-project/reports/RFP_프로젝트_완료_보고서_5팀.pdf)
+팀에서 저는 <strong>검색 담당(Retrieval Engineer)</strong>으로 임베딩 생성, 벡터 인덱스 구축, 검색 기법 개선과 평가를 맡았습니다. 팀원별 역할과 당시 성능 지표는 팀 저장소와 완료 보고서에 정리되어 있습니다. [원본 팀 저장소](https://github.com/Codeit-Part3-5Team/codeit-part3-5team-project) · [팀 프로젝트 완료 보고서](https://codeit-part3-5team.github.io/codeit-part3-5team-project/reports/RFP_프로젝트_완료_보고서_5팀.pdf)
 
 ## 검토에서 발견한 문제와 개인 고도화
 
