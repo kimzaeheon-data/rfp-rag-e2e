@@ -1,107 +1,81 @@
-# 2026-Agentic-RAG-Project: RFP 문서 요약 & 질문/답변 챗봇
+# RFPilot · 공공조달 RFP 챗봇 개인 고도화
 
-AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타트업 **'입찰메이트(RFPilot)'** 사내 RAG 시스템입니다. 
-공공조달 RFP 문서(HWP 96 / PDF 4, 총 100건)에 대해 컨설턴트가 자연어로 질의하면, 검색·생성·의무항목 추출을 결합해 답변과 준수 체크리스트를 제공합니다.
+코드잇 AI 엔지니어 10기 5팀에서 만든 공공조달 RFP 챗봇 **입찰메이트(RFPilot)**를 개인적으로 고도화한 저장소입니다. 팀 프로젝트를 마친 뒤 검색 평가 코드와 실제 챗봇의 요청 경로를 다시 따라가며, 검색 조건이 답변에 반영되는 방식과 전체 목록을 조회하는 방식을 개선했습니다.
 
-> **기간**: 2026-06-17 ~ 07-08 (3주)
-> **결과물**: 프로젝트 완료 보고서 + GitHub repo 제출
+## 팀 프로젝트에서 만든 것
 
----
+팀은 공공조달 제안요청서 100건(HWP 96건, PDF 4건)을 대상으로 문서 조회·요약, 근거 인용, 준수 체크리스트 기능을 구현했습니다. 문서를 전처리해 BGE-M3와 FAISS로 검색하고, LangGraph가 질문 유형에 따라 조회와 체크리스트 경로를 선택합니다. FastAPI와 React로 챗봇을 연결했습니다.
 
-## 데모 (웹 챗봇 화면)
+팀에서 저는 **검색 담당(Retrieval Engineer)**으로 임베딩 생성, 벡터 인덱스 구축, 검색 기법 개선과 평가를 맡았습니다. 팀원별 역할과 당시 성능 지표는 팀 저장소와 완료 보고서에 정리되어 있습니다. [원본 팀 저장소](https://github.com/Codeit-Part3-5Team/codeit-part3-5team-project) · [팀 프로젝트 완료 보고서](https://codeit-part3-5team.github.io/codeit-part3-5team-project/reports/RFP_프로젝트_완료_보고서_5팀.pdf)
 
-**조회 — 근거 문서·추천 질문과 함께 답변**
+## 검토에서 발견한 문제와 개인 고도화
 
-![챗봇 조회 화면](reports/agentic-chatbot1.png)
+### 1. 검색 평가에서 사용한 메타데이터 필터를 챗봇에 연결
 
-**체크리스트 — 항목별 신뢰 배지·인용 하이라이트·CSV**
+검색 단독 평가에서는 질문에서 발주기관·예산·날짜를 추출해 검색 함수에 전달했습니다. 챗봇의 첫 검색은 재작성된 질문과 `top_k`만 전달하고 있어, 평가에서 사용한 조건이 답변 근거를 고르는 과정에 빠져 있었습니다.
 
-![챗봇 체크리스트 화면](reports/agentic-chatbot2.png)
+기존 조건 추출기를 Route A에 연결해 기관·예산·날짜 조건과 정렬을 첫 검색에 적용했습니다. 재검색에서도 조건을 유지하도록 하고, 생성 모델에는 그 조건을 통과한 청크를 전달하도록 했습니다. [Route A](backend/graph/nodes/route_a.py) · [조건 추출기](backend/retrieval/query_parser.py) · [재검색 노드](backend/graph/nodes/re_retrieve.py)
 
----
+전수 조회를 추가하기 전에 실제 RFP 메타요약 100건과 골든셋 v4의 6문항으로, 같은 챗봇 경로에서 필터를 끈 경우와 켠 경우를 비교했습니다. 이 실험에서는 OpenAI를 사용해 조건 추출과 답변 생성까지 실행했습니다.
 
-## 프로젝트 개요 (수치)
+| 지표 | 필터 끔 | 필터 켬 |
+| --- | ---: | ---: |
+| 정답 문서가 검색 1위에 나온 문항 | 3/6 | 6/6 |
+| 정답 문서 회수율 평균 (상위 5건) | 50.0% | 87.1% |
+| 평균 전체 응답시간 | 7.90초 | 10.44초 |
 
-### 데이터 규모
-- RFP 문서: 100건 (HWP 96 / PDF 4)
-- 청크: 14,606개 (chunks_v1)
-- 골든셋(V5): 954 라벨 / 937 in_scope 채점 대상 (DE 아인 담당)
+최대 예산과 최초 공개일 질문은 최종 답변도 오답에서 정답으로 바뀌었습니다. 응답시간은 평균 2.54초 늘었습니다. 위 수치는 메타요약 인덱스와 6문항에 대한 소규모 비교 결과입니다.
 
-### 성능 지표
-| 파트 | 지표 | 값 |
-|------|------|-----|
-| 라우트 C (의무항목 추출) | Item Coverage (V5, 8문서 전수) | 0.886 |
-| 라우트 C | Item Precision | 0.286 |
-| 라우트 C | Review Burden | 9.7% |
-| 검색 (RAG) | Hit Rate @5 | 0.940 |
-| 검색 (RAG) | MRR | 0.940 |
-| 검색 (RAG) | Context Recall | 0.940 |
-| 검색 (RAG) | Context Precision | 0.848 |
-| 검색 (RAG) | 평균 응답 시간 | 207.7ms |
-| 생성 | Faithfulness (golden 63, 비거부 50건) | 0.905 |
-| 생성 | Answer Correctness | 0.608 |
+### 2. 사업 목록과 건수를 전체 인덱스에서 조회
 
-라우트 C는 문서 단위 전수 채점(filter=none) 기준이며, 문서별 Coverage는 0.831~0.922로 안정적입니다.
+첫 번째 실험에서 “예산 5억 원 이상인 사업을 모두 알려줘”는 조건에 맞는 사업을 22건 찾았지만, `top_k=5` 제한으로 답변에는 5건만 들어갔습니다. 목록이나 건수를 묻는 질문은 검색 상위권 밖의 사업도 확인해야 했습니다.
 
----
+전수 조회 경로에서는 인덱스의 문서를 `doc_id`로 묶고, 사업별 대표 메타데이터에 조건을 적용합니다. 코드가 일치한 사업을 모두 나열하거나 건수를 계산합니다. 조건 판단에 필요한 값이 비어 있는 경우는 별도로 표시합니다. [전수 조회 구현](backend/retrieval/catalog.py)
 
-## 팀 구성
+실제 사업 메타요약 100건을 넣고 `/chat`에서 조건 추출 응답을 고정해 조회 로직을 검증했습니다. 예산 5억 원 이상 질문에서 **골든셋과 일치하는 22건 전부**를 반환했고, 예산을 확인할 수 없는 7건을 별도로 안내했습니다. 한국수자원공사 발주 사업도 **정답 3건 전부**를 반환했습니다. 이 검증 범위는 조건 추출 이후의 전수 조회와 응답입니다.
 
-| 이름 | 역할 | 담당 |
-| --- | --- | --- |
-| 민재 | PM (Project Manager) | 일정 관리, 이슈 조율, PR 리뷰 |
-| 도혁 | DE (Data Engineer) | 문서 청킹 전략 설계 및 검증, 라우트 C 기능 구현 |
-| 아인 | DE (Data Engineer) | 문서별 메타데이터 처리, 골든 데이터셋 구축 |
-| 재헌 | RE (Retrieval Engineer) | 임베딩 생성, vector DB 구축, retrieval 기법 고도화 |
-| 수민 | SD (Service Developer) | 모델 응답 고도화(정확도, 포맷, 길이, 톤 등), 챗봇 서비스 개발|
+## 개인 고도화 데모
 
----
+가상 사업 10건을 사용한 로컬 React 화면입니다. 조건 추출과 일반 조회의 생성 응답은 데모용으로 구성했고, 검색 필터와 전수 조회는 실제 챗봇 코드로 실행했습니다.
 
-## 팀 보고서
+### 일반 조회 · 메타데이터 필터 적용
 
-<a href="https://codeit-part3-5team.github.io/codeit-part3-5team-project/reports/RFP_프로젝트_완료_보고서_5팀.pdf">바로 가기</a>
+미래데이터원이 발주한 예산 5억 원 이상 사업 중 하나를 답변합니다. 참고 문서에는 기관과 예산 조건을 모두 충족한 2건이 표시됩니다.
 
----
+![RFPilot 일반 조회 데모 — 기관과 예산 필터를 통과한 참고 문서 2건](reports/metadata-filter-demo.png)
 
-## 협업일지 및 팀 일간 보고서
+### 전수 조회 · 일치하는 사업 전체 반환
 
-<a href="https://github.com/orgs/Codeit-Part3-5Team/discussions">바로 가기</a>
+예산 5억 원 이상인 사업을 예산 내림차순으로 조회합니다. 조건에 맞는 7건을 모두 나열하고, 예산 정보가 없어 판정할 수 없는 1건은 따로 안내합니다.
 
----
+![RFPilot 전수 조회 데모 — 예산 5억 원 이상인 예시 사업 7건](reports/exhaustive-lookup-demo.png)
 
-## 프로젝트 파이프라인
+## 현재 파이프라인
 
-실제 LangGraph 노드 흐름입니다.
-
+```mermaid
+flowchart TD
+    Q["질문과 대화 이력"] --> R["질문 재작성 · 라우팅"]
+    R --> A["Route A · 문서 조회"]
+    R --> C["Route C · 준수 체크리스트"]
+    A --> P["기관 · 예산 · 날짜 등 조건 추출"]
+    P --> S["일반 조회 · FAISS 검색과 조건 필터링"]
+    P --> E["전수 조회 · 사업 단위로 전체 조건 검사"]
+    S --> G["근거 기반 답변 생성"]
+    E --> L["목록 또는 건수 계산"]
+    C --> D["문서 선택 · 의무항목 추출"]
+    G --> V["최종 규칙 검사 · 응답"]
+    L --> V
+    D --> V
 ```
-[사용자 질문]
-   │  ▼
-질문 분석 (question_analysis)   대명사 해소·질문 재작성
-   │  ▼
-라우팅 (routing)   의도로 분기 (문서 선택 시 route_c 직행)
-   │
-   ├── route_a ── 질문 조건 추출 → RFP 검색 (FAISS + bge-m3)
-   │      ├─ 전수 조회 : 인덱스의 사업별 메타데이터로 목록·건수 계산
-   │      ├─ naive   : 재검색 없이 바로 생성
-   │      └─ agentic : grade → 부족 시 re_retrieve 재검색 루프
-   │
-   └── route_c ── 문서 선택 후 의무항목 추출
-          ├─ 후보 문서 반환 → 사용자 선택
-          └─ 선택 문서 체크리스트 생성 (캐시 우선)
-   │  ▼
-답변 생성 (answer_generation)   검색 근거로 답변 / 체크리스트 렌더
-   │  ▼
-검증 (self_check)   근거·거부 판정
-   │  ▼
-[최종 답변]
-```
+
+일반 조회는 Naive 모드에서 검색 후 생성으로 넘어가고, Agentic 모드에서는 검색 결과를 평가하고 필요할 때 재검색합니다.
 
 ---
 
 ## 프로젝트 구조
 
 ```
-codeit-part3-5team-project/
+rfp-rag-e2e/
 ├── data/                 # 데이터 (.gitignore, NDA)
 │   ├── raw/              # 원본 HWP, PDF
 │   ├── metadata/         # data_list.csv
@@ -144,19 +118,17 @@ codeit-part3-5team-project/
 ### 설치
 
 ```bash
-git clone https://github.com/Codeit-Part3-5Team/codeit-part3-5team-project.git
-cd codeit-part3-5team-project
+git clone https://github.com/kimzaeheon-data/rfp-rag-e2e.git
+cd rfp-rag-e2e
 
 # 가상환경 생성 (conda 권장)
-conda create -n codeit-part3-5team-project python=3.12 -y
-conda activate codeit-part3-5team-project
+conda create -n rfp-rag-e2e python=3.12 -y
+conda activate rfp-rag-e2e
 
 pip install -r requirements.txt
-pip install -e .
 ```
 
-`pip install -e .`는 개발 중인 현재 프로젝트를 Python 환경에 등록합니다.
-노트북 또는 다른 작업 디렉터리에서 실행해도 `from backend...` import를 안정적으로 사용할 수 있습니다.
+백엔드와 평가 모듈은 저장소 루트에서 `python -m backend...` 형식으로 실행합니다.
 
 ---
 
@@ -262,7 +234,7 @@ python -m backend.evaluation.run_eval
 
 “예산 5억 원 이상인 사업을 모두 알려줘”처럼 사업 목록이나 건수를 요청하면, 인덱스에 등록된 사업을 문서 ID로 중복 제거하고 전체를 조회합니다. 발주기관, 예산 범위, 공개일·입찰일 범위를 지원하며, 필수 메타데이터가 없어 판정할 수 없는 건수는 별도로 표시합니다. 목록과 건수는 조회 결과로 직접 만들고, 일반 질의의 `top_k` 제한은 적용하지 않습니다.
 
-조건 추출을 끈 경우와 비교하려면 같은 골든셋과 설정으로 아래 두 명령을 실행합니다. 각 결과에는 답변과 검색 근거가 함께 저장됩니다.
+현재 챗봇의 기본 경로와 조건 추출·전수 조회를 끈 경로를 비교하려면 같은 골든셋과 설정으로 아래 두 명령을 실행합니다. 각 결과에는 답변과 검색 근거가 함께 저장됩니다.
 
 ```bash
 python -m backend.evaluation.generate_answers --limit 5 --no-query-metadata --tag metadata_ab
