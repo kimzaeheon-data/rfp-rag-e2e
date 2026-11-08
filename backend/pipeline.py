@@ -5,7 +5,7 @@ RAG 파이프라인 메인 조립부.
 
 핵심 함수:
     get_ai_response(query, history, config, ...) : 외부 인터페이스(서비스/평가 진입점)
-    retrieve(query, config)                      : retriever_type에 따라 검색 수행
+    retrieve(query, config, ...)                 : 검색 조건을 적용해 청크 회수
 """
 from utils.config import load_config  # config.yaml 읽기
 # 지금까지 만든 모듈들을 하나로 조립하는 메인 파이프라인
@@ -77,28 +77,15 @@ def get_vectorstore():
 
 
 
-# retriever_type에 따라 검색 방식 선택
-def retrieve(query: str, config: dict) -> list[Document]:
-    """
-    retriever_type에 따라 검색을 수행한다.
-
-    Args:
-        query : 사용자 질문
-        config: 설정 dict (retriever_type, top_k 등)
-
-    Returns:
-        list[Document]: 검색된 청크 리스트 (metadata에 score 포함)
-    """
-    retriever_type = config.get("retriever_type", "naive_rag")
-    top_k = config.get("top_k", 5)
-
-    vs = get_vectorstore()  # 캐싱된 벡터스토어 사용
-
-    if retriever_type == "agentic_rag":
-        # agentic 미구현 — 현재는 naive와 동일하게 MMR 검색 사용 (이후 agentic 오면 교체예정)
-        return get_retriever(query, vs, k=top_k)
-    else:  # naive_rag (기본)
-        return get_retriever(query, vs, k=top_k)
+def retrieve(query: str, config: dict, *, metadata: dict | None = None) -> list[Document]:
+    """Naive와 Agentic이 공유하는 첫 검색. 재검색 여부는 그래프에서 결정한다."""
+    return get_retriever(
+        query,
+        get_vectorstore(),
+        k=config.get("top_k", 5),
+        strict_agency=True,
+        **(metadata or {}),
+    )
 
 
 # LangGraph 앱 캐싱 — 첫 호출 때 1회 컴파일 후 재사용.

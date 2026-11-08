@@ -161,6 +161,7 @@ def _filter_docs(
     date_field: str | None = None,
     date_min: str | None = None,
     date_max: str | None = None,
+    strict_agency: bool = False,
 ) -> list[Document]:
     """
     Document 리스트를 메타데이터 조건으로 필터링합니다.
@@ -174,6 +175,7 @@ def _filter_docs(
         date_field  : 날짜 필터 기준 필드 (announcement_date | bid_start | bid_end)
         date_min    : 날짜 하한 (YYYY-MM-DD, 없으면 미적용)
         date_max    : 날짜 상한 (YYYY-MM-DD, 없으면 미적용)
+        strict_agency: 기관을 후보에서 찾지 못했을 때 빈 결과를 반환
 
     Returns:
         필터링된 Document 리스트
@@ -190,6 +192,8 @@ def _filter_docs(
         if resolved:
             filtered = [d for d in filtered if d.metadata.get("agency_normalized") == resolved]
             print(f"[retriever] agency 필터: '{agency}' → '{resolved}' ({len(filtered)}개)")
+        elif strict_agency:
+            return []
         else:
             print(f"[retriever] agency 필터: '{agency}' 매칭 실패 — 필터 미적용")
 
@@ -255,6 +259,7 @@ def get_retriever(
     lambda_mult: float = MMR_LAMBDA,
     use_rerank: bool = False,
     rerank_top_n: int = 100,
+    strict_agency: bool = False,
 ) -> list[Document]:
     """
     메타데이터 필터링 + MMR 검색을 수행합니다.
@@ -276,6 +281,7 @@ def get_retriever(
         lambda_mult  : MMR 관련성 가중치 (1=관련성만, 0=다양성만)
         use_rerank   : True면 cross-encoder로 재정렬 후 top-k 반환
         rerank_top_n : reranking 입력 후보 수 (필터 후 상위 N개만 rerank)
+        strict_agency: 기관이 일치하는 후보를 찾지 못하면 빈 결과 반환
 
     Returns:
         list[Document]: 검색된 문서 리스트
@@ -314,6 +320,7 @@ def get_retriever(
             date_field=date_field,
             date_min=date_min,
             date_max=date_max,
+            strict_agency=strict_agency,
         )
 
     # 정렬 (sort_by 지정 시 score 기반 MMR 순서 대신 메타데이터 기준으로 재정렬)

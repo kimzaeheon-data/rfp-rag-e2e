@@ -80,7 +80,7 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
    │  ▼
 라우팅 (routing)   의도로 분기 (문서 선택 시 route_c 직행)
    │
-   ├── route_a ── RFP 검색 (FAISS + bge-m3)
+   ├── route_a ── 질문 조건 추출 → RFP 검색 (FAISS + bge-m3)
    │      ├─ naive   : 재검색 없이 바로 생성
    │      └─ agentic : grade → 부족 시 re_retrieve 재검색 루프
    │
@@ -255,6 +255,13 @@ python -m backend.pipeline
 #    주의: OpenAI 호출로 비용 발생. 전체 실행 전 --limit로 소량 확인 권장.
 python -m backend.evaluation.generate_answers --limit 5
 python -m backend.evaluation.run_eval
+```
+
+일반 조회(Route A)는 기관·예산·날짜·정렬 조건을 첫 검색과 재검색에 적용합니다. 조건 추출을 끈 경우와 비교하려면 같은 골든셋과 설정으로 아래 두 명령을 실행합니다. 각 결과에는 답변과 검색 근거가 함께 저장됩니다.
+
+```bash
+python -m backend.evaluation.generate_answers --limit 5 --no-query-metadata --tag metadata_ab
+python -m backend.evaluation.generate_answers --limit 5 --tag metadata_ab
 ```
 
 ### 챗봇 단독 실행

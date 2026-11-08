@@ -24,9 +24,8 @@ query_parser.py
 """
 
 import json
+from datetime import date
 from openai import OpenAI
-
-client = OpenAI()
 
 _SYSTEM_PROMPT = """\
 당신은 공공 입찰 RFP 검색 시스템의 쿼리 분석기입니다.
@@ -73,12 +72,13 @@ _EMPTY_META = {
 }
 
 
-def extract_metadata(question: str) -> dict:
+def extract_metadata(question: str, *, timeout: float | None = None) -> dict:
     """
     질문에서 필터/정렬 조건을 추출합니다.
 
     Args:
         question: 사용자 질문
+        timeout: 서비스에서 사용할 API 타임아웃. 지정하면 SDK 재시도를 생략합니다.
 
     Returns:
         {agency, project_name, budget_min, budget_max,
@@ -86,6 +86,7 @@ def extract_metadata(question: str) -> dict:
     """
     user_content = f"{_SYSTEM_PROMPT}\n\n질문: {question}"
 
+    client = OpenAI() if timeout is None else OpenAI(timeout=timeout, max_retries=0)
     response = client.chat.completions.create(
         model="gpt-5-nano",
         messages=[{"role": "user", "content": user_content}],
@@ -103,17 +104,31 @@ def extract_metadata(question: str) -> dict:
 
     try:
         result = json.loads(raw)
-        return {
-            "agency":        result.get("agency") or None,
-            "project_name":  result.get("project_name") or None,
-            "budget_min":    result.get("budget_min"),
-            "budget_max":    result.get("budget_max"),
-            "date_field":    result.get("date_field") or None,
-            "date_min":      result.get("date_min") or None,
-            "date_max":      result.get("date_max") or None,
-            "sort_by":       result.get("sort_by") or None,
-            "sort_order":    result.get("sort_order") or None,
-        }
-    except json.JSONDecodeError:
-        print(f"[query_parser] JSON 파싱 실패: {raw!r} — 필터 미적용")
+        if not isinstance(result, dict):
+            raise ValueError("Expected a JSON object")
+        metadata = dict(_EMPTY_META)
+        for key in metadata:
+            value = result.get(key)
+            if value is None:
+                continue
+            if key in ("budget_min", "budget_max"):
+                if type(value) is not int or value < 0:
+                    raise ValueError(f"Invalid {key}")
+            else:
+                if not isinstance(value, str):
+                    raise ValueError(f"Invalid {key}")
+                value = value.strip() or None
+                if value and key in ("date_min", "date_max"):
+                    value = date.fromisoformat(value).isoformat()
+            metadata[key] = value
+
+        if metadata["date_field"] not in (None, "announcement_date", "bid_end", "bid_start"):
+            raise ValueError("Invalid date_field")
+        if metadata["sort_by"] not in (None, "budget_amount", "announcement_date", "bid_end"):
+            raise ValueError("Invalid sort_by")
+        if metadata["sort_order"] not in (None, "asc", "desc"):
+            raise ValueError("Invalid sort_order")
+        return metadata
+    except ValueError:
+        print("[query_parser] 검색 조건 응답을 해석하지 못해 기본 검색을 사용합니다.")
         return dict(_EMPTY_META)

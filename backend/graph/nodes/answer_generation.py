@@ -69,6 +69,11 @@ def answer_generation_node(state) -> dict:
         # 검색 청크(Document) 기반 RAG 답변. 재구성 질문으로 답변(followup 일관성).
         query = state.get("rewritten_question") or state["question"]
         docs = state.get("docs", [])
+        if state.get("search_metadata") and not docs:
+            return {
+                "answer": "검색 결과에서 요청하신 조건을 만족하는 근거를 찾지 못했습니다.",
+                "tokens_used": 0,
+            }
         answer, tokens_used = generate_answer(
             query,
             docs,

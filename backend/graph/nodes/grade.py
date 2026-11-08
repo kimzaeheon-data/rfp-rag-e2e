@@ -9,7 +9,7 @@ agentic 재검색 루프의 '판단' 부분(루프 자체는 build.py의 조건�
   out_of_scope  : RFP 범위 밖(거부 대상) → 재검색 말고 answer_generation(거부)으로
 
 비용 설계(하이브리드 1차):
-  - docs가 0개면 LLM을 부르지 않고 룰로 즉시 out_of_scope 처리(빈 검색에 LLM 낭비 방지).
+  - docs가 0개면 LLM 없이 판정한다. 조건 검색은 후보를 넓혀 다시 검색할 수 있다.
   - 청크가 있을 때만 LLM 판정을 호출한다.
 알맹이는 기존 call_gpt()를 재활용한다(새 LLM 호출 함수 만들지 않음).
 """
@@ -67,7 +67,7 @@ def grade_node(state) -> dict:
     """
     검색결과(docs)가 질문에 충분한지 LLM으로 판정하고, 재시도 횟수를 증가시킨다.
 
-    - docs가 비었으면 LLM 없이 out_of_scope로 단락(하이브리드: 빈 검색은 룰로 처리).
+    - docs가 비었으면 조건 검색만 insufficient로 판정해 재검색을 허용한다.
     - JSON 파싱 실패 시 sufficient로 폴백(재검색 루프를 타지 않는 안전한 쪽).
 
     Returns:
@@ -77,9 +77,9 @@ def grade_node(state) -> dict:
     retry_count = state.get("retry_count", 0) + 1
 
     docs = state.get("docs", [])
-    # 빈 검색결과: LLM 부르지 않고 즉시 범위밖 처리(비용 절약)
     if not docs:
-        return {"grade": "out_of_scope", "retry_count": retry_count}
+        grade = "insufficient" if state.get("search_metadata") else "out_of_scope"
+        return {"grade": grade, "retry_count": retry_count}
 
     # 재구성 질문 우선(followup 일관성), 없으면 원문
     question = state.get("rewritten_question") or state["question"]

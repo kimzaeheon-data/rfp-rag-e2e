@@ -138,9 +138,13 @@ def main():
                         help="골든셋 파일 경로(선택). 지정 시 config 경로 대신 사용(표본셋 주입용).")
     parser.add_argument("--tag", type=str, default=None,
                         help="파일명 끝에 붙일 실험 구분 태그(예: final63). 기존 실험과 안 겹치게.")
+    parser.add_argument("--no-query-metadata", action="store_true",
+                        help="첫 검색의 질문 조건 추출을 끄고 기존 검색 방식으로 비교합니다.")
     args = parser.parse_args()
 
     config = load_config()
+    if args.no_query_metadata:
+        config["use_query_metadata"] = False
     # Ollama 모델을 인자로 받으면 config에 주입(모델별로 따로 생성·저장하기 위함)
     if args.ollama_model:
         config["ollama_model"] = args.ollama_model
@@ -171,6 +175,8 @@ def main():
         strategy = config.get("re_retrieve_strategy")
         if strategy:
             tag = f"{tag}_{strategy}"
+    if not config.get("use_query_metadata", True):
+        tag = f"{tag}_no_query_metadata"
     # 실험 구분 태그(선택): 같은 조건 재실행이 기존 파일을 덮지 않도록 파일명 끝에 붙인다.
     if args.tag:
         tag = f"{tag}_{args.tag}"
@@ -185,6 +191,7 @@ def main():
             "ollama_model": config.get("ollama_model") if args.use_ollama else None,
             "limit": args.limit,
             "retriever_type": config.get("retriever_type"),          # naive_rag / agentic_rag
+            "use_query_metadata": config.get("use_query_metadata", True),
             "re_retrieve_strategy": config.get("re_retrieve_strategy"),  # precision / recall (재검색 case 구분)
             "total_tokens": gen_meta["total_tokens"],
             "total_elapsed_sec": gen_meta["total_elapsed_sec"],
