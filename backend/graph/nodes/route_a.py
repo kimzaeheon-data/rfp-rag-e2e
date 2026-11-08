@@ -9,7 +9,8 @@ import logging
 
 from openai import OpenAIError
 
-from backend.pipeline import retrieve   # 검색 흡수 경로(기존 통합 함수)
+from backend.pipeline import get_vectorstore, retrieve
+from backend.retrieval.catalog import catalog_operation, catalog_response
 from backend.retrieval.query_parser import extract_metadata
 
 logger = logging.getLogger(__name__)
@@ -30,11 +31,15 @@ def route_a_node(state) -> dict:
     config = state.get("config", {})
     metadata = {}
     if config.get("use_query_metadata", True):
+        operation = catalog_operation(query)
+        parsed = {}
         try:
-            parsed = extract_metadata(query, timeout=10.0)
+            parsed = extract_metadata(query, timeout=10.0, for_catalog=bool(operation))
         except OpenAIError as exc:
-            logger.warning("검색 조건 추출 실패(%s). 기본 검색을 사용합니다.", type(exc).__name__)
-        else:
+            logger.warning("검색 조건 추출 실패(%s)", type(exc).__name__)
+        if operation:
+            return catalog_response(operation, parsed, get_vectorstore)
+        if parsed:
             # 사업명 부분 문자열 필터는 기존 실험에서 정답 청크를 과하게 제외했다.
             metadata = {key: value for key, value in parsed.items()
                         if key != "project_name" and value is not None}

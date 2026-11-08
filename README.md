@@ -81,6 +81,7 @@ AI 엔지니어 10기 중급 팀 프로젝트 — 가상 B2G 입찰지원 스타
 라우팅 (routing)   의도로 분기 (문서 선택 시 route_c 직행)
    │
    ├── route_a ── 질문 조건 추출 → RFP 검색 (FAISS + bge-m3)
+   │      ├─ 전수 조회 : 인덱스의 사업별 메타데이터로 목록·건수 계산
    │      ├─ naive   : 재검색 없이 바로 생성
    │      └─ agentic : grade → 부족 시 re_retrieve 재검색 루프
    │
@@ -257,7 +258,11 @@ python -m backend.evaluation.generate_answers --limit 5
 python -m backend.evaluation.run_eval
 ```
 
-일반 조회(Route A)는 기관·예산·날짜·정렬 조건을 첫 검색과 재검색에 적용합니다. 조건 추출을 끈 경우와 비교하려면 같은 골든셋과 설정으로 아래 두 명령을 실행합니다. 각 결과에는 답변과 검색 근거가 함께 저장됩니다.
+일반 조회(Route A)는 기관·예산·날짜·정렬 조건을 첫 검색과 재검색에 적용합니다.
+
+“예산 5억 원 이상인 사업을 모두 알려줘”처럼 사업 목록이나 건수를 요청하면, 인덱스에 등록된 사업을 문서 ID로 중복 제거하고 전체를 조회합니다. 발주기관, 예산 범위, 공개일·입찰일 범위를 지원하며, 필수 메타데이터가 없어 판정할 수 없는 건수는 별도로 표시합니다. 목록과 건수는 조회 결과로 직접 만들고, 일반 질의의 `top_k` 제한은 적용하지 않습니다.
+
+조건 추출을 끈 경우와 비교하려면 같은 골든셋과 설정으로 아래 두 명령을 실행합니다. 각 결과에는 답변과 검색 근거가 함께 저장됩니다.
 
 ```bash
 python -m backend.evaluation.generate_answers --limit 5 --no-query-metadata --tag metadata_ab

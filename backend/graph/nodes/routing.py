@@ -6,6 +6,7 @@ routing.py
 
 이 노드는 route 문자열만 기록한다. 실제 분기는 build.py의 조건부 엣지가 수행한다.
 """
+from backend.retrieval.catalog import catalog_operation
 
 # 라우트 C(체크리스트 생성) 강신호 — 이것만 있으면 조회 어미가 있어도 무조건 route_c.
 _ROUTE_C_STRONG = ["체크리스트"]
@@ -14,7 +15,7 @@ _ROUTE_C_STRONG = ["체크리스트"]
 # ("제출 서류는 무엇인가요?" 같은 조회 질문이 route_c로 새는 것을 방지)
 _ROUTE_C_LIST = [
     "요구사항 전부", "요구사항 목록", "제출서류 목록", "제출 서류 목록",
-    "필수 항목", "준비물", "빠짐없이", "전체 목록", "제출 서류", "준수 사항",
+    "필수 항목", "준비물", "제출 서류", "준수 사항",
 ]
 
 # 조회 의문형 어미 — 리스트형 키워드가 걸려도 이 어미로 끝나면 조회로 보고 route_a.
@@ -48,7 +49,10 @@ def routing_node(state) -> dict:
         return {"route": "route_c"}
 
     # 리스트형 의도 + 조회 의문형 어미가 아님 → route_c
-    if any(kw in q for kw in _ROUTE_C_LIST) and not any(e in q for e in _LOOKUP_ENDINGS):
-        return {"route": "route_c"}
+    if not any(ending in q for ending in _LOOKUP_ENDINGS):
+        if any(kw in q for kw in _ROUTE_C_LIST):
+            return {"route": "route_c"}
+        if any(kw in q for kw in ("빠짐없이", "전체 목록")) and not catalog_operation(q):
+            return {"route": "route_c"}
 
     return {"route": "route_a"}

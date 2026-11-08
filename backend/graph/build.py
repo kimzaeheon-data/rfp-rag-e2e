@@ -53,10 +53,13 @@ def _grade_selector(state: GraphState) -> str:
 def _mode_selector(state: GraphState) -> str:
     """
     retriever_type으로 route_a 다음 행선지를 정한다(naive/agentic 토글).
+      - 전수 조회 → self_check (목록·건수는 메타데이터로 이미 계산됨)
       - agentic_rag → grade(재검색 루프 수행)
       - naive_rag(기본) → grade 건너뛰고 바로 answer_generation
     config는 state로 주입된다(그래프 컴파일은 인자 없이 하므로 state에서 읽음).
     """
+    if state.get("answer"):
+        return "self_check"
     config = state.get("config", {})
     if config.get("retriever_type") == "agentic_rag":
         return "grade"
@@ -103,7 +106,7 @@ def build_graph():
     g.add_conditional_edges(
         "route_a",
         _mode_selector,
-        {"grade": "grade", "answer_generation": "answer_generation"},
+        {"grade": "grade", "answer_generation": "answer_generation", "self_check": "self_check"},
     )
     # grade 판정으로 분기: 부실하고 재시도 여유 있으면 재검색 루프, 아니면 생성
     g.add_conditional_edges(
